@@ -1,1 +1,1 @@
-Initialize externals directory.
+外部依赖

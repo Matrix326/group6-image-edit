@@ -26,11 +26,12 @@ group6-image-edit/
 │   ├── run_magicbrush_p2p_oracle_crop.py
 │   ├── rerank_background_preserve.py
 │   └── run_magicbrush_ultimate.py
+│ 
 ├── layer/                             #分图层修改代码
 │   ├── train_qwen_edit_lora_pair.py
 │   ├── try0_lora.py
 │   ├── untitled.py
-│   ├── layer_README.md
+│   └──layer_README.md
 │
 ├── configs/keepedit/                  # KeepEdit 配置
 ├── scripts/keepedit/                  # KeepEdit 数据、训练、评估、上传脚本

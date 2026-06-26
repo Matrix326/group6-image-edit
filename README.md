@@ -4,6 +4,9 @@
 
 1. **KeepEdit**：基于 Qwen-Image-Edit-2511，完成 Qwen2511 base、GT-LoRA、MTP LoRA、MoE Teacher LoRA 四条主线，并提供训练、推理、评估、可视化和 Hugging Face 发布资源。
 2. **InstructPix2Pix + MagicBrush baseline**：基于经典 InstructPix2Pix，完成 MagicBrush 上的 baseline 推理、多候选 oracle、局部 crop 编辑、背景保持 rerank 与 soft mask fusion。
+3、 **layer**:基于 Qwen-Image-Edit LoRA 微调、Qwen-Image-Layered 图像分层 和 CLIP 图层推荐 的局部图像编辑流程。完成 LoRA 微调，图片分解，CLIP 推荐，局部编辑，重新合成的任务。
+
+1. 项目
 
 本仓库只管理代码、脚本、配置、文档和小型结果摘要。数据和权重体积较大，可以按 README 下载，也可以用软链接或环境变量指向已有路径。
 
@@ -23,6 +26,11 @@ group6-image-edit/
 │   ├── run_magicbrush_p2p_oracle_crop.py
 │   ├── rerank_background_preserve.py
 │   └── run_magicbrush_ultimate.py
+├── layer/                             #分图层修改代码
+│   ├── train_qwen_edit_lora_pair.py
+│   ├── try0_lora.py
+│   ├── untitled.py
+│   ├── layer_README.md
 │
 ├── configs/keepedit/                  # KeepEdit 配置
 ├── scripts/keepedit/                  # KeepEdit 数据、训练、评估、上传脚本

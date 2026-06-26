@@ -198,11 +198,6 @@ output/edited_layer_图层编号_时间戳.png
 * `compare_时间戳.jpg`：原图与编辑结果的左右对比图
 * `edited_layer_图层编号_时间戳.png`：被修改后的单独图层
 
-图层分解结果会保存在：
-
-```text
-debug_layers/
-
 ## 9. 模型下载
 
 本项目需要提前下载以下模型。

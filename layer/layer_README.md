@@ -202,8 +202,14 @@ output/edited_layer_图层编号_时间戳.png
 
 ```text
 debug_layers/
-├── layer_0.png
-├── layer_1.png
-├── layer_2.png
-└── ...
+
+## 9. 模型下载
+
+本项目需要提前下载以下模型。
+
+| 模型                             | 作用                        |
+| ------------------------------ | -------------------------- |
+| `Qwen/Qwen-Image-Layered`      | 图像分层，将输入图片拆分为多个 RGBA layer |
+| `Qwen/Qwen-Image-Edit`         | 图像编辑基础模型，用于 LoRA 微调和推理编辑   |
+| `openai/clip-vit-base-patch32` | CLIP 图文相似度模型，用于自动推荐目标图层    |
 

@@ -3,8 +3,9 @@
 本仓库是小组图像编辑方向的整合仓库，包含下面内容：
 
 1. **KeepEdit**：基于 Qwen-Image-Edit-2511，完成 Qwen2511 base、GT-LoRA、MTP LoRA、MoE Teacher LoRA 四条主线，并提供训练、推理、评估、可视化和 Hugging Face 发布资源。
-2. **InstructPix2Pix + MagicBrush baseline**：基于经典 InstructPix2Pix，完成 MagicBrush 上的 baseline 推理、多候选 oracle、局部 crop 编辑、背景保持 rerank 与 soft mask fusion。
-3. **layer**:基于 Qwen-Image-Edit LoRA 微调、Qwen-Image-Layered 图像分层 和 CLIP 图层推荐 的局部图像编辑流程。完成 LoRA 微调，图片分解，CLIP 推荐，局部编辑，重新合成的任务。
+2. **Qwen-Image-Edit baseline + step distillation**：重新整理 Qwen-Image-Edit baseline 复现流程，并提供 4-step 到 40-step 的轻量 gated residual adapter 蒸馏代码、脚本、checkpoint、训练日志、loss 曲线和 dev60 评测结果。
+3. **InstructPix2Pix + MagicBrush baseline**：基于经典 InstructPix2Pix，完成 MagicBrush 上的 baseline 推理、多候选 oracle、局部 crop 编辑、背景保持 rerank 与 soft mask fusion。
+4. **layer**:基于 Qwen-Image-Edit LoRA 微调、Qwen-Image-Layered 图像分层 和 CLIP 图层推荐 的局部图像编辑流程。完成 LoRA 微调，图片分解，CLIP 推荐，局部编辑，重新合成的任务。
 
 1. 项目
 
@@ -15,36 +16,38 @@
 ```text
 group6-image-edit/
 ├── README.md                         # 小组总说明与运行入口
-├── requirement.txt                    # 额外依赖记录，当前主要依赖见 pyproject.toml / 子模块说明
-├── pyproject.toml                     # KeepEdit Python 包配置
-├── Makefile                           # KeepEdit 常用命令快捷入口
+├── requirement.txt                   # 额外依赖记录，当前主要依赖见 pyproject.toml / 子模块说明
+├── pyproject.toml                    # KeepEdit Python 包配置
+├── Makefile                          # KeepEdit 常用命令快捷入口
 │
-├── instruct-pix2pix/                  # InstructPix2Pix + MagicBrush 扩展脚本
+├── instruct-pix2pix/                 # InstructPix2Pix + MagicBrush 扩展脚本
 │   ├── README_InstructPix2Pix_MagicBrush.md
 │   ├── run_magicbrush_dev.py
 │   ├── run_magicbrush_p2p_oracle.py
 │   ├── run_magicbrush_p2p_oracle_crop.py
 │   ├── rerank_background_preserve.py
 │   └── run_magicbrush_ultimate.py
-│ 
-├── layer/                             #分图层修改代码
+│
+├── layer/                            # 分图层修改代码
 │   ├── train_qwen_edit_lora_pair.py
 │   ├── try0_lora.py
 │   ├── untitled.py
-│   └──layer_README.md
+│   └── layer_README.md
 │
-├── configs/keepedit/                  # KeepEdit 配置
-├── scripts/keepedit/                  # KeepEdit 数据、训练、评估、上传脚本
-├── src/keepedit/                      # KeepEdit Python package
-├── docs/keepedit/                     # KeepEdit 方法文档
-├── logs/keepedit/                     # KeepEdit 指标、loss 曲线、可视化摘要
-├── hf_release/keepedit/               # KeepEdit HF data/weights README
+├── configs/keepedit/                 # KeepEdit 配置
+├── scripts/keepedit/                 # KeepEdit 数据、训练、评估、上传脚本
+│   └── qwen_distill/                 # Qwen baseline / step-distill 训练与评估脚本
+├── src/keepedit/                     # KeepEdit Python package
+├── docs/keepedit/                    # KeepEdit 方法文档
+├── logs/keepedit/                    # KeepEdit 指标、loss 曲线、可视化摘要
+├── hf_release/keepedit/              # KeepEdit HF data/weights README
+├── reports/                          # 实验结果、报告与可视化图表
 │
-├── data/                              # 可选：运行时数据目录，不强制进入 git
-├── checkpoints/                       # 可选：运行时权重目录，不强制进入 git
-├── externals/keepedit/                # 可选：DiffSynth-Studio / EditAR 等外部依赖
-├── models/
-└── outputs/
+├── datas/                            # 可选：运行时数据目录，不强制进入 git
+├── checkpoints/                      # 可选：运行时权重目录，不强制进入 git
+├── externals/keepedit/               # 可选：DiffSynth-Studio / EditAR 等外部依赖
+├── models/                           # 可选：模型文件目录
+└── outputs/                          # 可选：推理/评估输出目录
 ```
 
 建议从仓库根目录运行 KeepEdit 命令；InstructPix2Pix 命令建议进入 `instruct-pix2pix/` 后运行，因为脚本依赖官方 `edit_cli.py`、`configs/generate.yaml` 和 checkpoint 的相对路径。
@@ -187,13 +190,137 @@ bash scripts/keepedit/evaluate_qwen_edit_experiment.sh
 
 ## 4. KeepEdit 模块运行方法和结果
 
-KeepEdit 的主线是训练和评估 Qwen-Image-Edit-2511 LoRA。最终推理阶段只输入：
+### 4.0 Qwen-Image-Edit baseline 与 4-step 蒸馏
+
+本仓库包含一个 Qwen-Image-Edit baseline + 4-step self-distillation adapter 运行流程。
+该流程主要包括 baseline 结果生成、student/teacher 缓存创建、adapter 训练与评估。
+
+相关目录：
 
 ```text
-source image + instruction
+docs/qwen_image_edit_baseline.md
+docs/qwen_step_distill_adapter.md
+scripts/qwen_distill/
+src/keepedit/qwen_distill/
+checkpoints/base4_to_base40/
+logs/base4_to_base40/
+reports/qwen_distill/
 ```
 
-不需要 target、mask、专家候选图或 MoE teacher 图。
+#### 4.0.1 Baseline 定义
+
+Baseline 输入：
+
+```text
+source image + editing instruction
+```
+
+Baseline 输出：
+
+```text
+Qwen-Image-Edit(source, instruction)
+```
+
+MagicBrush 的 target/mask 仅用于评估，不作为模型输入。
+默认配置：
+
+```text
+Qwen-4step: 4 steps, fast student
+Qwen-40step: 40 steps, high-quality teacher
+```
+
+#### 4.0.2 运行 baseline
+
+从仓库根目录运行：
+
+```bash
+cd /share/home/group6/Project/group6-image-edit
+GPU=0 MAX_SAMPLES=60 bash scripts/qwen_distill/run_qwen_baseline_dev60.sh
+```
+
+如果需要同时生成 4-step 和 40-step 结果，可执行：
+
+```bash
+VARIANTS="base4:4:4.0:none,base40:40:4.0:none" GPU=0 MAX_SAMPLES=60 bash scripts/qwen_distill/cache_qwen_4step_40step.sh
+```
+
+#### 4.0.3 生成蒸馏缓存
+
+缓存 student/teacher 结果用于 adapter 训练：
+
+```bash
+GPU=0 MAX_SAMPLES=60 bash scripts/qwen_distill/cache_qwen_4step_40step.sh
+```
+
+默认输出目录：
+
+```text
+outputs/qwen_step_distill/cache_dev60/
+```
+
+可用环境变量覆盖默认路径：
+
+```bash
+QWEN_ROOT=/path/to/qwen-image-edit-baseline MANIFEST=/path/to/magicbrush_dev60.json OUT=/path/to/cache_out GPU=0 bash scripts/qwen_distill/cache_qwen_4step_40step.sh
+```
+
+#### 4.0.4 训练 adapter
+
+先导出训练 metadata：
+
+```bash
+CACHE_JSON=outputs/qwen_step_distill/cache_dev60/qwen_distill_lora_speed_results.json OUT=outputs/qwen_step_distill/step_distill_train.json bash scripts/qwen_distill/export_step_distill_metadata.sh
+```
+
+然后运行训练：
+
+```bash
+METADATA=outputs/qwen_step_distill/step_distill_train.json GPU=0 bash scripts/qwen_distill/train_step_distill_adapter.sh
+```
+
+训练脚本默认参数：
+
+```text
+IMAGE_SIZE=512
+HIDDEN=128
+BATCH_SIZE=8
+EPOCHS=688
+LR=3e-5
+VAL_COUNT=10
+```
+
+#### 4.0.5 评估 adapter
+
+使用 student cache 和训练 checkpoint 评估 adapter：
+
+```bash
+STUDENT_JSON=outputs/qwen_step_distill/cache_dev60/qwen_distill_lora_speed_results.json CKPT=checkpoints/base4_to_base40/step_distill_adapter_best.pt bash scripts/qwen_distill/eval_step_distill_adapter.sh
+```
+
+默认评估输出目录：
+
+```text
+outputs/qwen_step_distill/eval_base4_adapter_dev60/
+```
+
+#### 4.0.6 运行速览
+
+主要执行：
+
+```bash
+bash scripts/qwen_distill/run_qwen_baseline_dev60.sh
+bash scripts/qwen_distill/cache_qwen_4step_40step.sh
+bash scripts/qwen_distill/export_step_distill_metadata.sh
+bash scripts/qwen_distill/train_step_distill_adapter.sh
+bash scripts/qwen_distill/eval_step_distill_adapter.sh
+```
+
+更多细节请参考：
+
+```text
+docs/qwen_image_edit_baseline.md
+docs/qwen_step_distill_adapter.md
+```
 
 ### 4.1 安装 KeepEdit 包
 

@@ -1,1 +1,0 @@
-下载Qwen__Qwen-Image-Edit，Qwen3-VL-8B-Instruct，timbrooks__instruct-pix2pix

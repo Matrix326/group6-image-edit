@@ -1,0 +1,13 @@
+data
+pretrained_models
+checkpoints
+wandb
+__pycache__
+logs/
+*egg-info
+.agent/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.bin

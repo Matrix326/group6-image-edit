@@ -1,0 +1,137 @@
+\subsection{EditAR 局限与后续优化}
+
+EditAR 的改进空间主要来自其自回归视觉生成范式本身。VQ-VAE 重建图像时低频结构通常较稳定，但纹理、高频细节和局部边界与原图存在较大差异；这会使 EditAR 在需要精细保持背景和局部纹理的编辑任务中处于劣势。
+
+此外，EditAR 训练时采用 teacher forcing，而推理时需要根据已经生成的 token 继续预测下一个 token。随着序列长度增加，早期 token 的误差可能逐步累积并影响后续生成，导致局部编辑错位、纹理漂移或目标语义不完整。该问题可概括为：
+\[
+p(\{y_i\}_{i=1}^{N}\mid I,p)
+=\prod_{i=1}^{N}p(y_i\mid y_{<i},\operatorname{tok}(I),\operatorname{tok}(p)),
+\]
+其中任一前序 token 的偏差都可能影响后续条件分布。
+
+\subsubsection{EditAR 重建误差可视化}
+
+如图~\ref{fig:vqvae-reconstruction} 所示，VQ-VAE 在将图像离散 token 化的过程中不可避免地会引入信息损失。低频结构通常能够得到较好保留，例如卫生间毛巾、洗手台等大面积色块；但纹理、高频细节以及局部边界会出现更明显的偏差，例如卫生间地砖、字体等区域。对于指令式图像编辑任务，这一点尤其关键：编辑模型不仅需要准确修改目标对象，还需要尽可能保持未编辑区域的纹理、光照和细节一致。因此，VQ-VAE 的重建误差会使 EditAR 在精细编辑与背景保持之间更难取得平衡。
+
+此外，如图~\ref{fig:editar-distribution-shift} 所示，EditAR 在训练阶段采用 teacher forcing，而在推理阶段需要基于模型已经生成的 token 继续预测后续 token，因此训练与推理之间存在分布偏移。训练时，模型接收到的前缀来自真实 token；而推理时，模型接收到的前缀则来自自身生成的 token。因此，早期 token 的小误差会在后续自回归预测过程中逐渐累积，导致纹理漂移、局部结构错位或编辑语义不完整。图中绿色框表示早期预测的 token，其预测图像与目标图像的 token 较为接近；但随着预测过程继续进行，误差逐步累积，最终导致后期生成的 token 与目标图像 token 的差距增大，如红色框所示。不过，这些生成结果仍相对更接近原图对应的 token，说明模型在一定程度上保留了原始图像结构，但难以完全对齐目标编辑结果。
+
+\begin{figure}[htbp]
+    \centering
+
+    \begin{subfigure}[t]{0.48\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{figures/editar/vqvae_reconstruction.png}
+        \caption{VQ-VAE 重建误差可视化}
+        \label{fig:vqvae-reconstruction}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.48\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{figures/editar/distribution_shift.png}
+        \caption{训练与推理阶段的 token 分布偏移}
+        \label{fig:editar-distribution-shift}
+    \end{subfigure}
+
+    \caption{EditAR 复现过程中的主要误差来源可视化}
+    \label{fig:editar-error-visualization}
+\end{figure}
+
+
+\subsubsection{LoRA 改进尝试与实验设置}
+
+针对上述自回归误差累积和文本响应不足的问题，本文进一步尝试了若干轻量 LoRA 微调方案。LoRA 在冻结原始线性层权重 \(W_0\) 的基础上学习低秩增量：
+\[
+h = W_0x + \Delta W x,\qquad
+\Delta W = \frac{\alpha}{r}BA,
+\]
+其中 \(A\in\mathbb{R}^{r\times d_{\mathrm{in}}}\)、\(B\in\mathbb{R}^{d_{\mathrm{out}}\times r}\)，\(r\) 为 rank，\(\alpha\) 为缩放系数。本文将不同注入范围和训练目标的 LoRA 变体记为 Backbone LoRA、Region LoRA、Contrast LoRA 和 Projection LoRA。
+
+\paragraph{Backbone LoRA}
+Backbone LoRA 在 Transformer 主干和文本条件投影层上注入 LoRA，包括 attention 的 \(W_{qkv},W_o\)、FFN 的 \(W_1,W_2,W_3\)，以及 \(\operatorname{cap\_proj}\)。其目标仍为标准自回归 next-token prediction：
+\[
+\mathcal{L}_{\mathrm{CE}}
+=-\sum_{i=1}^{N}\log p_{\theta+\Delta\theta}
+(y_i^\ast\mid y_{<i}^\ast,\operatorname{tok}(I),e(p)),
+\]
+其中 \(e(p)\) 为 T5 文本编码后的条件 embedding。该方案检验大范围参数高效微调本身是否能够提升编辑质量。
+
+\paragraph{Region LoRA}
+Region LoRA 在 Backbone LoRA 的基础上引入编辑区域加权损失。给定编辑 mask \(M\)，将其下采样到视觉 token 网格，得到权重 \(w_i\)：
+\[
+\mathcal{L}_{\mathrm{mask}}
+=-\sum_{i=1}^{N}w_i
+\log p_{\theta+\Delta\theta}
+(y_i^\ast\mid y_{<i}^\ast,\operatorname{tok}(I),e(p)),
+\]
+\[
+w_i=
+\begin{cases}
+\lambda_{\mathrm{edit}}, & i\in M,\\
+\lambda_{\mathrm{bg}}, & i\notin M.
+\end{cases}
+\]
+该设计希望模型更关注真正需要编辑的 token，而不是主要学习背景重建。
+
+\paragraph{Contrast LoRA}
+Contrast LoRA 在 Region LoRA 的基础上加入错误文本指令的对比约束。对于同一输入图像，使用正确指令 \(p^+\) 和 batch 内采样得到的错误指令 \(p^-\) 分别计算目标 token 损失：
+\[
+\mathcal{L}^{+}=\mathcal{L}_{\mathrm{CE}}(I,p^+,Y^\ast),\qquad
+\mathcal{L}^{-}=\mathcal{L}_{\mathrm{CE}}(I,p^-,Y^\ast).
+\]
+随后加入 margin loss：
+\[
+\mathcal{L}_{\mathrm{neg}}
+=\max(0,\,m+\mathcal{L}^{+}-\mathcal{L}^{-}),
+\]
+总目标为
+\[
+\mathcal{L}
+=\mathcal{L}_{\mathrm{mask}}+\gamma\mathcal{L}_{\mathrm{neg}}.
+\]
+该约束希望模型在正确文本下比错误文本下更容易预测目标图像 token，从而增强文本条件的判别性。
+
+\paragraph{Projection LoRA}
+Projection LoRA 只在文本条件投影层 \(\operatorname{cap\_proj.fc1},\operatorname{cap\_proj.fc2}\) 上注入 LoRA，而不改动 Transformer 主干：
+\[
+e'(p)=\operatorname{cap\_proj}_{0}(e(p))
++\Delta\operatorname{cap\_proj}(e(p)).
+\]
+因此，它主要调整 T5 文本特征进入 GPT hidden space 的映射方式，更接近文本条件校准，而不是大范围改变视觉 token 的自回归动力学。
+
+\begin{table}[t]
+\centering
+\small
+\caption{MagicBrush-60 上 EditAR 及其 LoRA 变体的客观指标。TO 表示 Target--Output，IO 表示 Input--Output；Edit Chg. 为编辑区域平均亮度变化。}
+\label{tab:editar-lora-benchmark}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lrrrrrr}
+\toprule
+Method & TO SSIM$\uparrow$ & TO PSNR$\uparrow$ & BG-SSIM$\uparrow$ & IO SSIM$\uparrow$ & Edit Chg. & Samples \\
+\midrule
+EditAR & 0.7364 & 16.4860 & \textbf{0.7636} & 0.8340 & 0.0277 & 60 \\
+Contrast LoRA & 0.6456 & 14.9111 & 0.6287 & 0.7192 & 0.0314 & 60 \\
+Region LoRA & 0.5763 & 14.1572 & 0.5127 & 0.6366 & 0.0339 & 60 \\
+Projection LoRA & \textbf{0.7441} & \textbf{16.7503} & 0.7478 & \textbf{0.8448} & \textbf{0.0218} & 60 \\
+Backbone LoRA & 0.5729 & 13.9032 & 0.5150 & 0.6412 & 0.0331 & 60 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\subsubsection{LoRA 改进效果分析}
+
+表~\ref{tab:editar-lora-benchmark} 给出了 MagicBrush-60 上 EditAR 及其 LoRA 变体的客观指标。原始 EditAR 在 BG-SSIM 上达到 \(0.7636\)，说明预训练模型本身具有较强的背景保持能力。然而，除 Projection LoRA 外，其余 LoRA 变体的 TO SSIM、TO PSNR、BG-SSIM 和 IO SSIM 均明显下降。例如 Backbone LoRA 的 TO SSIM 从 \(0.7364\) 降至 \(0.5729\)，Region LoRA 也仅为 \(0.5763\)。这说明大范围 LoRA 微调虽然增加了可训练自由度，但并未解决 EditAR 的核心误差来源，反而破坏了预训练模型已经学到的图像重建和背景保持分布。
+
+该现象与 EditAR 的自回归生成机制一致。训练阶段模型在真实前缀 \(y_{<i}^{\ast}\) 上优化：
+\[
+p_{\theta}(y_i^\ast\mid y_{<i}^{\ast},\operatorname{tok}(I),e(p)),
+\]
+但推理阶段条件前缀变为模型自身采样得到的 \(\hat{y}_{<i}\)：
+\[
+p_{\theta}(\hat{y}_i\mid \hat{y}_{<i},\operatorname{tok}(I),e(p)).
+\]
+当 \(\hat{y}_{<i}\) 与 \(y_{<i}^{\ast}\) 的差距逐步扩大时，后续 token 的条件分布也会偏离训练分布。LoRA 只是在固定自回归结构上引入低秩参数增量，无法根本改变 teacher forcing 与 free-running inference 之间的分布偏移。因此，区域加权或负文本对比即使能在训练目标上强化编辑区域和文本差异，也可能在长序列推理中被误差累积抵消，并带来背景破坏。
+
+Projection LoRA 是唯一取得轻微正收益的方案：TO SSIM 从 \(0.7364\) 提升到 \(0.7441\)，TO PSNR 从 \(16.4860\) 提升到 \(16.7503\)，IO SSIM 从 \(0.8340\) 提升到 \(0.8448\)。它只作用于 \(\operatorname{cap\_proj}\) 文本条件投影层，没有大幅改变 Transformer 主干的视觉 token 转移分布，而是对文本 embedding 到生成模型 hidden space 的映射进行小范围校准。因此，该方法的收益主要来自较温和的文本响应增强，而不是彻底解决自回归分布偏移。
+
+综上，本组实验支持两个结论。第一，EditAR 作为自回归视觉编辑模型，其长程生成天然面临训练和推理前缀不一致导致的 distribution shift；类似问题在语言模型的长程自回归生成中也只能被有限缓解，因此单纯依赖 LoRA 很难根本解决。Backbone LoRA、Region LoRA 和 Contrast LoRA 甚至可能使模型偏离预训练视觉分布，导致性能低于 pretrained EditAR。第二，Projection LoRA 只校准文本条件投影层，主要增强文本特征进入生成模型的方式，因此虽然不能消除自回归误差累积，但可以在不显著扰动主干生成分布的前提下带来轻微性能提升。

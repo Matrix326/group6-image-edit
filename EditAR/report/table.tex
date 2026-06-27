@@ -1,0 +1,19 @@
+\begin{table}[t]
+\centering
+\small
+\caption{MagicBrush-60 上 EditAR 及其 LoRA 变体的客观指标。TO 表示 Target--Output，IO 表示 Input--Output；Edit Chg. 为编辑区域平均亮度变化。}
+\label{tab:editar-lora-benchmark}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lrrrrrr}
+\toprule
+Method & TO SSIM$\uparrow$ & TO PSNR$\uparrow$ & BG-SSIM$\uparrow$ & IO SSIM$\uparrow$ & Edit Chg. & Samples \\
+\midrule
+EditAR & 0.7364 & 16.4860 & \textbf{0.7636} & 0.8340 & 0.0277 & 60 \\
+Contrast LoRA & 0.6456 & 14.9111 & 0.6287 & 0.7192 & 0.0314 & 60 \\
+Region LoRA & 0.5763 & 14.1572 & 0.5127 & 0.6366 & 0.0339 & 60 \\
+Projection LoRA & \textbf{0.7441} & \textbf{16.7503} & 0.7478 & \textbf{0.8448} & \textbf{0.0218} & 60 \\
+Backbone LoRA & 0.5729 & 13.9032 & 0.5150 & 0.6412 & 0.0331 & 60 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}

@@ -6,6 +6,7 @@
 2. **Qwen-Image-Edit baseline + step distillation**：重新整理 Qwen-Image-Edit baseline 复现流程，并提供 4-step 到 40-step 的轻量 gated residual adapter 蒸馏代码、脚本、checkpoint、训练日志、loss 曲线和 dev60 评测结果。
 3. **InstructPix2Pix + MagicBrush baseline**：基于经典 InstructPix2Pix，完成 MagicBrush 上的 baseline 推理、多候选 oracle、局部 crop 编辑、背景保持 rerank 与 soft mask fusion。
 4. **layer**:基于 Qwen-Image-Edit LoRA 微调、Qwen-Image-Layered 图像分层 和 CLIP 图层推荐 的局部图像编辑流程。完成 LoRA 微调，图片分解，CLIP 推荐，局部编辑，重新合成的任务。
+4. **EditAR**：基于原始 EditAR 自回归图像编辑框架，保留 baseline，并实现报告中的 Backbone LoRA、Region LoRA、Contrast LoRA 和 Projection LoRA 消融。核心改动位置和运行方式见 [EditAR 子文档](docs/editar/EditAR.md)。
 
 1. 项目
 
@@ -34,11 +35,27 @@ group6-image-edit/
 │   ├── untitled.py
 │   └── layer_README.md
 │
+├── EditAR/                            # EditAR 官方仓库代码 + 本项目 LoRA 改动
+│   ├── autoregressive/
+│   │   ├── models/lora.py             # 新增：LoRA adapter 注入与保存工具
+│   │   ├── models/gpt_edit.py         # 修改：支持 token_loss_weight
+│   │   ├── train/train_edit.py        # 修改：LoRA / Region / Contrast 训练入口
+│   │   ├── train/mask_weight.py       # 新增：Region LoRA mask token 权重
+│   │   └── train/contrastive.py       # 新增：Contrast LoRA margin loss
+│   ├── dataset/
+│   │   ├── Edit_MagicBrush.py         # 新增：MagicBrush 训练集
+│   │   ├── Edit_MagicBrush_eval.py    # 新增：MagicBrush 推理集
+│   │   └── build.py                   # 修改：注册 MagicBrush
+│   ├── tools/                         # MagicBrush 指标、VQ/token 诊断工具
+│   ├── scripts/                       # EditAR baseline / LoRA / benchmark 脚本
+│   └── ...                            # 其余文件与 EditAR 官方仓库结构基本相同
+│
 ├── configs/keepedit/                 # KeepEdit 配置
 ├── scripts/keepedit/                 # KeepEdit 数据、训练、评估、上传脚本
 │   └── qwen_distill/                 # Qwen baseline / step-distill 训练与评估脚本
 ├── src/keepedit/                     # KeepEdit Python package
 ├── docs/keepedit/                    # KeepEdit 方法文档
+├── docs/editar/                       # EditAR 子文档
 ├── logs/keepedit/                    # KeepEdit 指标、loss 曲线、可视化摘要
 ├── hf_release/keepedit/              # KeepEdit HF data/weights README
 ├── reports/                          # 实验结果、报告与可视化图表
@@ -50,7 +67,7 @@ group6-image-edit/
 └── outputs/                          # 可选：推理/评估输出目录
 ```
 
-建议从仓库根目录运行 KeepEdit 命令；InstructPix2Pix 命令建议进入 `instruct-pix2pix/` 后运行，因为脚本依赖官方 `edit_cli.py`、`configs/generate.yaml` 和 checkpoint 的相对路径。
+建议从仓库根目录运行 KeepEdit 命令；InstructPix2Pix 命令建议进入 `instruct-pix2pix/` 后运行，因为脚本依赖官方 `edit_cli.py`、`configs/generate.yaml` 和 checkpoint 的相对路径。EditAR 部分的环境配置、权重下载、LoRA 训练和报告指标复现见 [docs/editar/EditAR.md](docs/editar/EditAR.md)。
 
 ## 2. 环境配置
 
@@ -805,6 +822,7 @@ bash scripts/keepedit/evaluate_qwen_edit_experiment.sh
 根 README 保留完整运行入口；更细节的算法说明见：
 
 - [InstructPix2Pix + MagicBrush](instruct-pix2pix/README_InstructPix2Pix_MagicBrush.md)
+- [EditAR LoRA 消融与复现说明](docs/editar/EditAR.md)
 - [Qwen2511 baseline](docs/keepedit/QWEN2511_BASELINE.md)
 - [GT-LoRA workflow](docs/keepedit/GT_LORA_WORKFLOW.md)
 - [MTP LoRA workflow](docs/keepedit/MTP_LORA_WORKFLOW.md)
